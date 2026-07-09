@@ -1,0 +1,79 @@
+name: Update US Macro Dashboard
+
+# When to run
+on:
+  schedule:
+    # 07:00 UTC every day (= 16:00 KST). US market close is ~21:00 UTC,
+    # FRED daily series (Treasury yields, etc.) typically post overnight.
+    - cron: "0 7 * * *"
+  # Allow manual runs from the Actions tab
+  workflow_dispatch:
+  # Also rebuild on any push to main (e.g. when you edit the template)
+  push:
+    branches: [main]
+
+# Minimal permissions for Pages deploy + auto-commit
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+# Prevent overlapping deploys
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch FRED data and rebuild dashboard.html
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: |
+          if [ -z "$FRED_API_KEY" ]; then
+            echo "::error::FRED_API_KEY secret is not set. Add it in Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          python3 update.py
+
+      - name: Commit refreshed dashboard.html
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dashboard.html
+          if git diff --cached --quiet; then
+            echo "No changes to dashboard.html — nothing to commit."
+          else
+            git commit -m "chore: auto-update dashboard $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
+
+      - name: Prepare Pages artifact
+        run: |
+          mkdir -p _site
+          cp dashboard.html _site/index.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>US Macro Dashboard</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #131a24;
+    --panel-2: #0f1620;
+    --border: #1f2937;
+    --text: #e6edf3;
+    --muted: #8a99ad;
+    --dim: #5a6477;
+    --accent: #ffd166;
+    --pos: #4ade80;
+    --neg: #f87171;
+    --line-2y: #06d6a0;
+    --line-5y: #ffd166;
+    --line-10y: #ef476f;
+    --line-30y: #a78bfa;
+    --line-blue: #118ab2;
+    --line-orange: #fb923c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 18px;
+    font-size: 13px;
+  }
+  a { color: var(--muted); text-decoration: none; }
+  a:hover { color: var(--accent); }
+  h1 { color: var(--accent); margin: 0; font-size: 22px; letter-spacing: 1.5px; font-weight: 700; }
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px; margin-bottom: 16px;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .subtitle { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .meta-right { color: var(--muted); font-size: 11px; text-align: right; line-height: 1.5; }
+  .period-selector { display: flex; gap: 4px; margin-bottom: 14px; flex-wrap: wrap; }
+  .period-btn {
+    background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+    padding: 5px 12px; cursor: pointer; border-radius: 3px;
+    font-size: 11px; font-family: inherit; font-weight: 500; letter-spacing: 0.3px;
+  }
+  .period-btn:hover { color: var(--text); border-color: var(--dim); }
+  .period-btn.active {
+    background: var(--accent); color: #000; border-color: var(--accent); font-weight: 700;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 8px; margin-bottom: 18px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    padding: 10px 12px; border-radius: 3px;
+  }
+  .card-label {
+    color: var(--muted); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .card-value { color: var(--text); font-size: 22px; font-weight: 600; margin: 2px 0; line-height: 1.1; }
+  .card-change { font-size: 11px; }
+  .card-change.pos { color: var(--pos); }
+  .card-change.neg { color: var(--neg); }
+  .card-change .ref { color: var(--dim); }
+  .card-date { color: var(--dim); font-size: 9px; margin-top: 3px; }
+  .tabs {
+    display: flex; border-bottom: 1px solid var(--border); margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .tab {
+    background: none; border: none; color: var(--muted);
+    padding: 8px 16px; cursor: pointer; font-size: 13px;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    font-family: inherit;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .chart-wrap {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 3px; padding: 12px;
+  }
+  .chart-wrap.wide { grid-column: 1 / -1; }
+  .chart-title { color: var(--text); font-size: 13px; font-weight: 600; }
+  .chart-source { color: var(--dim); font-size: 10px; margin-bottom: 6px; }
+  .chart-box { position: relative; height: 280px; }
+  .chart-box.tall { height: 340px; }
+  canvas { max-width: 100%; }
+  .footer {
+    color: var(--dim); font-size: 11px; margin-top: 24px;
+    padding-top: 10px; border-top: 1px solid var(--border); line-height: 1.7;
+  }
+  code { background: var(--panel); padding: 1px 5px; border-radius: 2px; font-size: 11px; }
+  .sample-banner {
+    display: none;
+    background: #2a2410; border: 1px solid var(--accent); border-left: 4px solid var(--accent);
+    color: var(--accent); padding: 10px 14px; margin-bottom: 14px;
+    border-radius: 3px; font-size: 12px;
+  }
+  .sample-banner.visible { display: block; }
+  .sample-banner code { background: rgba(255,209,102,0.15); color: var(--accent); }
+  @media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>US MACRO DASHBOARD</h1>
+    <div class="subtitle">Treasury yields · Real GDP · Inflation · Fed liquidity · NBER recession overlay</div>
+  </div>
+  <div class="meta-right">
+    <div id="last-updated">—</div>
+    <div>Source: <a href="https://fred.stlouisfed.org" target="_blank">FRED · St. Louis Fed</a></div>
+  </div>
+</div>
+
+<div class="sample-banner" id="sample-banner">
+  <strong>⚠ 샘플 데이터입니다.</strong> 실시간 FRED 데이터로 갱신하려면 이 폴더에서
+  <code>python3 update.py</code> 를 실행하세요 (FRED API 키 필요 — README 참조).
+</div>
+
+<div class="period-selector" id="period-selector">
+  <button class="period-btn" data-years="1">1Y</button>
+  <button class="period-btn" data-years="3">3Y</button>
+  <button class="period-btn active" data-years="5">5Y</button>
+  <button class="period-btn" data-years="10">10Y</button>
+  <button class="period-btn" data-years="20">20Y</button>
+  <button class="period-btn" data-years="0">MAX</button>
+</div>
+
+<div class="cards" id="cards"></div>
+
+<div class="tabs" id="tabs">
+  <button class="tab active" data-panel="treasuries">Treasuries</button>
+  <button class="tab" data-panel="gdp">GDP</button>
+  <button class="tab" data-panel="inflation">Inflation</button>
+  <button class="tab" data-panel="liquidity">Fed Liquidity</button>
+</div>
+
+<div class="panel active" id="panel-treasuries">
+  <div class="chart-grid">
+    <div class="chart-wrap wide">
+      <div class="chart-title">Treasury Yield Curve — Latest vs 3M / 12M ago</div>
+      <div class="chart-source">FRED · DGS1MO / 3MO / 6MO / 1 / 2 / 5 / 10 / 30 (constant-maturity Treasury rates)</div>
+      <div class="chart-box"><canvas id="curve"></canvas></div>
+    </div>
+    <div class="chart-wrap wide">
+      <div class="chart-title">Key Tenor Yields</div>
+      <div class="chart-source">FRED · DGS2 / DGS5 / DGS10 / DGS30 (red bands = NBER recessions)</div>
+      <div class="chart-box tall"><canvas id="yields-ts"></canvas></div>
+    </div>
+    <div class="chart-wrap wide">
+      <div class="chart-title">Yield Curve Spreads — Recession Leading Indicators</div>
+      <div class="chart-source">FRED · T10Y2Y, T10Y3M (below zero = curve inversion)</div>
+      <div class="chart-box"><canvas id="spreads"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="panel-gdp">
+  <div class="chart-grid">
+    <div class="chart-wrap wide">
+      <div class="chart-title">Real GDP — Level</div>
+      <div class="chart-source">FRED · GDPC1 (Billions of chained 2017 USD, SAAR)</div>
+      <div class="chart-box"><canvas id="gdp-level"></canvas></div>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">Real GDP Growth — QoQ Annualized</div>
+      <div class="chart-source">FRED · A191RL1Q225SBEA</div>
+      <div class="chart-box"><canvas id="gdp-qoq"></canvas></div>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">Real GDP Growth — YoY</div>
+      <div class="chart-source">Computed from GDPC1 (current quarter / 4 quarters ago - 1)</div>
+      <div class="chart-box"><canvas id="gdp-yoy"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="panel-inflation">
+  <div class="chart-grid">
+    <div class="chart-wrap">
+      <div class="chart-title">CPI YoY — Headline vs Core</div>
+      <div class="chart-source">FRED · CPIAUCSL, CPILFESL (BLS) · Fed 2% target dashed</div>
+      <div class="chart-box"><canvas id="cpi-yoy"></canvas></div>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">PCE YoY — Headline vs Core (Fed's preferred gauge)</div>
+      <div class="chart-source">FRED · PCEPI, PCEPILFE (BEA) · Fed 2% target dashed</div>
+      <div class="chart-box"><canvas id="pce-yoy"></canvas></div>
+    </div>
+    <div class="chart-wrap wide">
+      <div class="chart-title">10-Year Breakeven Inflation</div>
+      <div class="chart-source">FRED · T10YIE (market-implied 10Y inflation expectation, %)</div>
+      <div class="chart-box"><canvas id="breakeven"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="panel-liquidity">
+  <div class="chart-grid">
+    <div class="chart-wrap wide">
+      <div class="chart-title">Fed Balance Sheet — Total Assets ($ Trillions)</div>
+      <div class="chart-source">FRED · WALCL (weekly Wednesday level)</div>
+      <div class="chart-box"><canvas id="balsheet"></canvas></div>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">Liquidity Components — Reserves / RRP / TGA ($T)</div>
+      <div class="chart-source">FRED · WRESBAL / RRPONTSYD / WTREGEN</div>
+      <div class="chart-box"><canvas id="liq-components"></canvas></div>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">M2 Money Supply — YoY</div>
+      <div class="chart-source">FRED · M2SL (computed YoY %)</div>
+      <div class="chart-box"><canvas id="m2-yoy"></canvas></div>
+    </div>
+    <div class="chart-wrap wide">
+      <div class="chart-title">Federal Funds Effective Rate</div>
+      <div class="chart-source">FRED · FEDFUNDS (with NBER recession overlay)</div>
+      <div class="chart-box"><canvas id="ffr"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <strong>Data:</strong> <a href="https://fred.stlouisfed.org" target="_blank">FRED — Federal Reserve Economic Data, St. Louis Fed</a>.
+  Underlying primary sources: U.S. Treasury (yields), BEA (GDP, PCE), BLS (CPI), Federal Reserve Board (balance sheet, M2, fed funds), NBER (recession dates).<br>
+  Refresh data with <code>python update.py</code> (requires a free <a href="https://fred.stlouisfed.org/docs/api/api_key.html" target="_blank">FRED API key</a>).
+  Time periods controlled by the buttons above; recession bands appear on time-series charts. Curve view is unaffected by period selector.
+</div>
+
+<!-- Chart.js v4 + Luxon time adapter -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+
+<script>
+// ============================================================
+// Data payload — replaced by update.py
+// ============================================================
+const DATA = /*__DATA__*/{"meta":{"fetched_at":"never — run update.py first","source":"placeholder","n_series":0,"n_failed":0},"series":{}};
+
+// ============================================================
+// Utility functions
+// ============================================================
+function obsToPoints(obs) {
+  return (obs || []).map(([d, v]) => ({ x: d, y: v }));
+}
+
+function lastNonNull(obs) {
+  if (!obs) return null;
+  for (let i = obs.length - 1; i >= 0; i--) {
+    if (obs[i][1] != null && !isNaN(obs[i][1])) return obs[i];
+  }
+  return null;
+}
+
+function findClosestBefore(obs, targetDate) {
+  if (!obs || !obs.length || !targetDate) return null;
+  const t = new Date(targetDate).getTime();
+  let best = null;
+  for (const row of obs) {
+    if (new Date(row[0]).getTime() <= t) best = row;
+    else break;
+  }
+  return best;
+}
+
+function offsetDate(dateStr, days) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function computeYoYMonthly(obs) {
+  if (!obs) return [];
+  const out = [];
+  for (let i = 12; i < obs.length; i++) {
+    const a = obs[i - 12][1], b = obs[i][1];
+    if (a != null && b != null && a !== 0) out.push([obs[i][0], (b / a - 1) * 100]);
+  }
+  return out;
+}
+
+function computeYoYQuarterly(obs) {
+  if (!obs) return [];
+  const out = [];
+  for (let i = 4; i < obs.length; i++) {
+    const a = obs[i - 4][1], b = obs[i][1];
+    if (a != null && b != null && a !== 0) out.push([obs[i][0], (b / a - 1) * 100]);
+  }
+  return out;
+}
+
+function fmt(v, digits) {
+  if (v == null || isNaN(v)) return "—";
+  return Number(v).toLocaleString("en-US", {
+    minimumFractionDigits: digits ?? 2,
+    maximumFractionDigits: digits ?? 2,
+  });
+}
+
+// ============================================================
+// NBER recession bands plugin
+// ============================================================
+function recessionBands() {
+  const usrec = DATA.series.USREC?.obs || [];
+  const bands = [];
+  let start = null;
+  for (const [date, val] of usrec) {
+    if (val === 1 && start === null) start = date;
+    else if (val === 0 && start !== null) {
+      bands.push({ from: start, to: date });
+      start = null;
+    }
+  }
+  if (start !== null && usrec.length) bands.push({ from: start, to: usrec[usrec.length - 1][0] });
+  return bands;
+}
+
+const recessionPlugin = {
+  id: "recessionPlugin",
+  beforeDatasetsDraw(chart) {
+    const opt = chart.options.plugins?.recessionPlugin;
+    if (!opt || !opt.enabled) return;
+    const { ctx, chartArea, scales: { x } } = chart;
+    if (!x) return;
+    const bands = opt.bands || [];
+    ctx.save();
+    ctx.fillStyle = "rgba(248, 113, 113, 0.12)";
+    for (const b of bands) {
+      const x0 = x.getPixelForValue(new Date(b.from).getTime());
+      const x1 = x.getPixelForValue(new Date(b.to).getTime());
+      if (isNaN(x0) || isNaN(x1)) continue;
+      const left = Math.max(x0, chartArea.left);
+      const right = Math.min(x1, chartArea.right);
+      if (right > left) ctx.fillRect(left, chartArea.top, right - left, chartArea.bottom - chartArea.top);
+    }
+    ctx.restore();
+  },
+};
+
+// Horizontal reference line (e.g., Fed 2% target, zero line)
+const hLinePlugin = {
+  id: "hLinePlugin",
+  afterDatasetsDraw(chart) {
+    const opt = chart.options.plugins?.hLinePlugin;
+    if (!opt || !opt.lines) return;
+    const { ctx, chartArea, scales: { y } } = chart;
+    if (!y) return;
+    ctx.save();
+    for (const line of opt.lines) {
+      const yPos = y.getPixelForValue(line.value);
+      if (isNaN(yPos)) continue;
+      ctx.strokeStyle = line.color || "#5a6477";
+      ctx.lineWidth = line.width || 1;
+      ctx.setLineDash(line.dash || [4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, yPos);
+      ctx.lineTo(chartArea.right, yPos);
+      ctx.stroke();
+      if (line.label) {
+        ctx.setLineDash([]);
+        ctx.fillStyle = line.color || "#5a6477";
+        ctx.font = "10px -apple-system, system-ui, sans-serif";
+        ctx.textAlign = "right";
+        ctx.fillText(line.label, chartArea.right - 4, yPos - 3);
+      }
+    }
+    ctx.restore();
+  },
+};
+
+Chart.register(recessionPlugin, hLinePlugin);
+
+// ============================================================
+// Chart factory
+// ============================================================
+Chart.defaults.color = "#8a99ad";
+Chart.defaults.borderColor = "#1f2937";
+Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+Chart.defaults.font.size = 11;
+
+const charts = {};
+
+function buildDataset(label, obs, color, opts) {
+  opts = opts || {};
+  return {
+    label: label,
+    data: obsToPoints(obs),
+    borderColor: color,
+    backgroundColor: opts.fill ? color + "26" : color + "33",
+    borderWidth: opts.borderWidth ?? 1.6,
+    pointRadius: 0,
+    pointHoverRadius: 4,
+    tension: 0,
+    fill: !!opts.fill,
+    spanGaps: true,
+    ...(opts.extra || {}),
+  };
+}
+
+function makeTimeSeriesChart(canvasId, datasets, opts) {
+  opts = opts || {};
+  const bands = recessionBands();
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return null;
+  const config = {
+    type: opts.type || "line",
+    data: { datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: {
+          display: datasets.length > 1 || !!opts.forceLegend,
+          position: "top",
+          align: "end",
+          labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 }, padding: 8 },
+        },
+        tooltip: {
+          backgroundColor: "#0b0f14",
+          borderColor: "#1f2937",
+          borderWidth: 1,
+          titleColor: "#e6edf3",
+          bodyColor: "#e6edf3",
+          callbacks: {
+            title: (items) => {
+              if (!items.length) return "";
+              const dt = new Date(items[0].parsed.x);
+              return dt.toISOString().slice(0, 10);
+            },
+            label: (c) => `${c.dataset.label}: ${fmt(c.parsed.y, opts.digits ?? 2)}${opts.suffix || ""}`,
+          },
+        },
+        recessionPlugin: { enabled: opts.recessions !== false, bands: bands },
+        hLinePlugin: opts.hLines ? { lines: opts.hLines } : undefined,
+      },
+      scales: {
+        x: {
+          type: "time",
+          time: { unit: "year", tooltipFormat: "yyyy-MM-dd" },
+          grid: { color: "#1f2937" },
+          ticks: { color: "#8a99ad", font: { size: 10 }, maxRotation: 0 },
+        },
+        y: {
+          grid: { color: "#1f2937" },
+          ticks: {
+            color: "#8a99ad",
+            font: { size: 10 },
+            callback: (v) => fmt(v, opts.digits ?? 1) + (opts.suffix || ""),
+          },
+        },
+      },
+    },
+  };
+  return new Chart(ctx, config);
+}
+
+// Yield curve chart — x = tenor in years (linear), not time
+function makeCurveChart() {
+  const tenors = [
+    { id: "DGS1MO", x: 1 / 12 },
+    { id: "DGS3MO", x: 3 / 12 },
+    { id: "DGS6MO", x: 6 / 12 },
+    { id: "DGS1",   x: 1  },
+    { id: "DGS2",   x: 2  },
+    { id: "DGS5",   x: 5  },
+    { id: "DGS10",  x: 10 },
+    { id: "DGS30",  x: 30 },
+  ];
+  let latestDate = null;
+  for (const t of tenors) {
+    const last = lastNonNull(DATA.series[t.id]?.obs || []);
+    if (last && (!latestDate || last[0] > latestDate)) latestDate = last[0];
+  }
+  if (!latestDate) latestDate = new Date().toISOString().slice(0, 10);
+  const date3M = offsetDate(latestDate, -91);
+  const date12M = offsetDate(latestDate, -365);
+
+  function buildPoints(target) {
+    return tenors.map((t) => {
+      const obs = DATA.series[t.id]?.obs || [];
+      const row = target === latestDate ? lastNonNull(obs) : findClosestBefore(obs, target);
+      return { x: t.x, y: row ? row[1] : null, dateMatched: row ? row[0] : null };
+    });
+  }
+  const ds_today = buildPoints(latestDate);
+  const ds_3m = buildPoints(date3M);
+  const ds_12m = buildPoints(date12M);
+
+  const ctx = document.getElementById("curve");
+  if (!ctx) return;
+  charts.curve = new Chart(ctx, {
+    type: "line",
+    data: {
+      datasets: [
+        { label: `Latest (${latestDate})`, data: ds_today, borderColor: "#ffd166",
+          backgroundColor: "#ffd16633", borderWidth: 2.5, pointRadius: 5, tension: 0.25 },
+        { label: `3M ago (${date3M})`, data: ds_3m, borderColor: "#06d6a0",
+          borderWidth: 1.5, pointRadius: 4, borderDash: [4, 4], tension: 0.25 },
+        { label: `12M ago (${date12M})`, data: ds_12m, borderColor: "#8a99ad",
+          borderWidth: 1.5, pointRadius: 4, borderDash: [2, 4], tension: 0.25 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { position: "top", align: "end", labels: { boxWidth: 10, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              if (!items.length) return "";
+              const x = items[0].parsed.x;
+              return x < 1 ? `${Math.round(x * 12)}-Month` : `${x}-Year`;
+            },
+            label: (c) => `${c.dataset.label}: ${fmt(c.parsed.y, 2)}%`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          type: "linear", title: { display: true, text: "Tenor", color: "#8a99ad" },
+          grid: { color: "#1f2937" },
+          min: 0, max: 30,
+          ticks: {
+            color: "#8a99ad", font: { size: 10 },
+            stepSize: 5,
+            callback: (v) => v < 1 ? `${Math.round(v * 12)}M` : `${v}Y`,
+          },
+        },
+        y: {
+          title: { display: true, text: "Yield (%)", color: "#8a99ad" },
+          grid: { color: "#1f2937" },
+          ticks: { color: "#8a99ad", font: { size: 10 }, callback: (v) => fmt(v, 1) + "%" },
+        },
+      },
+    },
+  });
+}
+
+// ============================================================
+// Build all charts
+// ============================================================
+function buildCharts() {
+  // Curve view
+  makeCurveChart();
+
+  // Treasuries time series
+  charts.yields_ts = makeTimeSeriesChart("yields-ts", [
+    buildDataset("2Y",  DATA.series.DGS2?.obs,  "#06d6a0"),
+    buildDataset("5Y",  DATA.series.DGS5?.obs,  "#ffd166"),
+    buildDataset("10Y", DATA.series.DGS10?.obs, "#ef476f"),
+    buildDataset("30Y", DATA.series.DGS30?.obs, "#a78bfa"),
+  ], { suffix: "%", digits: 2 });
+
+  charts.spreads = makeTimeSeriesChart("spreads", [
+    buildDataset("10Y-2Y", DATA.series.T10Y2Y?.obs, "#ffd166"),
+    buildDataset("10Y-3M", DATA.series.T10Y3M?.obs, "#06d6a0"),
+  ], {
+    suffix: "%", digits: 2,
+    hLines: [{ value: 0, color: "#5a6477", dash: [2, 2], label: "0% (inversion)" }],
+  });
+
+  // GDP
+  charts.gdp_level = makeTimeSeriesChart("gdp-level", [
+    buildDataset("Real GDP (Bn$)", DATA.series.GDPC1?.obs, "#ffd166", { fill: true }),
+  ], { digits: 0, suffix: "" });
+
+  // QoQ ann. — bar with color by sign
+  const qoqObs = DATA.series.A191RL1Q225SBEA?.obs || [];
+  charts.gdp_qoq = (function () {
+    const ctx = document.getElementById("gdp-qoq");
+    if (!ctx) return null;
+    return new Chart(ctx, {
+      type: "bar",
+      data: {
+        datasets: [{
+          label: "Real GDP QoQ ann.",
+          data: obsToPoints(qoqObs),
+          backgroundColor: qoqObs.map((r) => (r[1] >= 0 ? "#06d6a0cc" : "#ef476fcc")),
+          borderColor: qoqObs.map((r) => (r[1] >= 0 ? "#06d6a0" : "#ef476f")),
+          borderWidth: 0,
+          barPercentage: 0.9, categoryPercentage: 1.0,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => items.length ? new Date(items[0].parsed.x).toISOString().slice(0, 10) : "",
+              label: (c) => `QoQ ann.: ${fmt(c.parsed.y, 1)}%`,
+            },
+          },
+          recessionPlugin: { enabled: true, bands: recessionBands() },
+          hLinePlugin: { lines: [{ value: 0, color: "#5a6477", dash: [2, 2] }] },
+        },
+        scales: {
+          x: { type: "time", time: { unit: "year" }, grid: { color: "#1f2937" }, ticks: { color: "#8a99ad", font: { size: 10 } } },
+          y: { grid: { color: "#1f2937" }, ticks: { color: "#8a99ad", font: { size: 10 }, callback: (v) => fmt(v, 1) + "%" } },
+        },
+      },
+    });
+  })();
+
+  const gdpYoY = computeYoYQuarterly(DATA.series.GDPC1?.obs);
+  charts.gdp_yoy = makeTimeSeriesChart("gdp-yoy", [
+    buildDataset("Real GDP YoY", gdpYoY, "#ef476f"),
+  ], {
+    suffix: "%", digits: 1,
+    hLines: [{ value: 0, color: "#5a6477", dash: [2, 2] }],
+  });
+
+  // Inflation
+  const cpiYoY     = computeYoYMonthly(DATA.series.CPIAUCSL?.obs);
+  const coreCpiYoY = computeYoYMonthly(DATA.series.CPILFESL?.obs);
+  const pceYoY     = computeYoYMonthly(DATA.series.PCEPI?.obs);
+  const corePceYoY = computeYoYMonthly(DATA.series.PCEPILFE?.obs);
+
+  charts.cpi_yoy = makeTimeSeriesChart("cpi-yoy", [
+    buildDataset("Headline CPI", cpiYoY, "#ef476f"),
+    buildDataset("Core CPI", coreCpiYoY, "#ffd166"),
+  ], {
+    suffix: "%", digits: 1,
+    hLines: [{ value: 2, color: "#06d6a0", dash: [4, 4], label: "Fed 2% target" }],
+  });
+
+  charts.pce_yoy = makeTimeSeriesChart("pce-yoy", [
+    buildDataset("Headline PCE", pceYoY, "#ef476f"),
+    buildDataset("Core PCE", corePceYoY, "#06d6a0"),
+  ], {
+    suffix: "%", digits: 1,
+    hLines: [{ value: 2, color: "#06d6a0", dash: [4, 4], label: "Fed 2% target" }],
+  });
+
+  charts.breakeven = makeTimeSeriesChart("breakeven", [
+    buildDataset("10Y Breakeven", DATA.series.T10YIE?.obs, "#ffd166"),
+  ], { suffix: "%", digits: 2 });
+
+  // Liquidity — convert to $T
+  const walclT = (DATA.series.WALCL?.obs   || []).map(([d, v]) => [d, v / 1e6]); // Mn$ → Tn$
+  const wresT  = (DATA.series.WRESBAL?.obs || []).map(([d, v]) => [d, v / 1e6]);
+  const rrpT   = (DATA.series.RRPONTSYD?.obs || []).map(([d, v]) => [d, v / 1e3]); // Bn$ → Tn$
+  const tgaT   = (DATA.series.WTREGEN?.obs || []).map(([d, v]) => [d, v / 1e6]);   // WTREGEN is Mn$ → Tn$
+
+  charts.balsheet = makeTimeSeriesChart("balsheet", [
+    buildDataset("Fed Total Assets ($T)", walclT, "#ffd166", { fill: true }),
+  ], { suffix: "T", digits: 2 });
+
+  charts.liq_components = makeTimeSeriesChart("liq-components", [
+    buildDataset("Reserves", wresT, "#06d6a0"),
+    buildDataset("RRP",      rrpT,  "#ef476f"),
+    buildDataset("TGA",      tgaT,  "#ffd166"),
+  ], { suffix: "T", digits: 2 });
+
+  const m2YoY = computeYoYMonthly(DATA.series.M2SL?.obs);
+  charts.m2_yoy = makeTimeSeriesChart("m2-yoy", [
+    buildDataset("M2 YoY", m2YoY, "#118ab2"),
+  ], {
+    suffix: "%", digits: 1,
+    hLines: [{ value: 0, color: "#5a6477", dash: [2, 2] }],
+  });
+
+  charts.ffr = makeTimeSeriesChart("ffr", [
+    buildDataset("Fed Funds Rate", DATA.series.FEDFUNDS?.obs, "#ffd166"),
+  ], { suffix: "%", digits: 2 });
+}
+
+// ============================================================
+// Snapshot cards
+// ============================================================
+function buildCards() {
+  const cpiYoY = computeYoYMonthly(DATA.series.CPIAUCSL?.obs);
+  const corePceYoY = computeYoYMonthly(DATA.series.PCEPILFE?.obs);
+  const gdpYoY = computeYoYQuarterly(DATA.series.GDPC1?.obs);
+  const m2YoY = computeYoYMonthly(DATA.series.M2SL?.obs);
+
+  const dgs10 = lastNonNull(DATA.series.DGS10?.obs);
+  const dgs10_30 = findClosestBefore(DATA.series.DGS10?.obs, offsetDate(dgs10?.[0], -30));
+
+  const t10y2y = lastNonNull(DATA.series.T10Y2Y?.obs);
+  const t10y2y_30 = findClosestBefore(DATA.series.T10Y2Y?.obs, offsetDate(t10y2y?.[0], -30));
+
+  const ffr = lastNonNull(DATA.series.FEDFUNDS?.obs);
+  const cpi = cpiYoY.length ? cpiYoY[cpiYoY.length - 1] : null;
+  const corePce = corePceYoY.length ? corePceYoY[corePceYoY.length - 1] : null;
+  const gdpG = gdpYoY.length ? gdpYoY[gdpYoY.length - 1] : null;
+  const m2 = m2YoY.length ? m2YoY[m2YoY.length - 1] : null;
+
+  const walclT = (DATA.series.WALCL?.obs || []).map(([d, v]) => [d, v / 1e6]);
+  const walcl = lastNonNull(walclT);
+  const walcl_1y = findClosestBefore(walclT, offsetDate(walcl?.[0], -365));
+
+  const defs = [
+    mkCardDef("10Y Treasury", dgs10, dgs10_30, "30d ago", "%", 2, "diff"),
+    mkCardDef("10Y-2Y Spread", t10y2y, t10y2y_30, "30d ago", "bps", 0, "diff", 100),
+    mkCardDef("Fed Funds Rate", ffr, null, null, "%", 2, null),
+    mkCardDef("Headline CPI YoY", cpi, null, null, "%", 1, null),
+    mkCardDef("Core PCE YoY", corePce, null, null, "%", 1, null),
+    mkCardDef("Real GDP YoY", gdpG, null, null, "%", 1, null),
+    mkCardDef("M2 YoY", m2, null, null, "%", 1, null),
+    mkCardDef("Fed Balance Sheet", walcl, walcl_1y, "1Y ago", "T", 2, "pct"),
+  ];
+  document.getElementById("cards").innerHTML = defs.map(renderCard).join("");
+
+  const meta = DATA.meta || {};
+  const fetched = (meta.fetched_at || "—").replace("T", " ").slice(0, 19);
+  const failed = meta.n_failed ? ` · ${meta.n_failed} failed` : "";
+  document.getElementById("last-updated").textContent =
+    `Data: ${fetched} UTC · ${meta.n_series || 0} series${failed}`;
+}
+
+function mkCardDef(label, value, prev, prevLabel, suffix, digits, mode, multiplier) {
+  return { label, value, prev, prevLabel, suffix, digits, mode, multiplier: multiplier || 1 };
+}
+
+function renderCard(c) {
+  if (!c.value) {
+    return `<div class="card"><div class="card-label">${c.label}</div>
+            <div class="card-value">—</div></div>`;
+  }
+  const [date, v] = c.value;
+  const displayV = v * c.multiplier;
+  const valueText = fmt(displayV, c.digits) + c.suffix;
+  let changeHtml = "";
+  if (c.prev && c.mode) {
+    const [, prevV] = c.prev;
+    const diff = v - prevV;
+    const cls = diff >= 0 ? "pos" : "neg";
+    const sign = diff >= 0 ? "+" : "";
+    if (c.mode === "diff") {
+      const dispDiff = diff * c.multiplier;
+      changeHtml = `<div class="card-change ${cls}">${sign}${fmt(dispDiff, c.digits)}${c.suffix} <span class="ref">vs ${c.prevLabel}</span></div>`;
+    } else if (c.mode === "pct") {
+      const pct = prevV !== 0 ? (diff / prevV) * 100 : 0;
+      const psign = pct >= 0 ? "+" : "";
+      changeHtml = `<div class="card-change ${cls}">${psign}${fmt(pct, 1)}% <span class="ref">vs ${c.prevLabel}</span></div>`;
+    }
+  }
+  return `<div class="card">
+    <div class="card-label">${c.label}</div>
+    <div class="card-value">${valueText}</div>
+    ${changeHtml}
+    <div class="card-date">${date}</div>
+  </div>`;
+}
+
+// ============================================================
+// Period selector
+// ============================================================
+function applyPeriod(years) {
+  let minDate;
+  if (years === 0) {
+    minDate = undefined;
+  } else {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - years);
+    minDate = d.toISOString();
+  }
+  for (const [key, ch] of Object.entries(charts)) {
+    if (!ch || key === "curve") continue;
+    if (!ch.options?.scales?.x) continue;
+    ch.options.scales.x.min = minDate;
+    ch.update("none");
+  }
+}
+
+// ============================================================
+// Init
+// ============================================================
+function init() {
+  // Show sample banner if data is mock
+  if (DATA.meta?.is_sample) {
+    document.getElementById("sample-banner")?.classList.add("visible");
+  }
+  buildCards();
+  buildCharts();
+  applyPeriod(5);
+
+  document.querySelectorAll(".period-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".period-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      applyPeriod(parseInt(btn.dataset.years, 10));
+    });
+  });
+  document.querySelectorAll(".tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("panel-" + btn.dataset.panel).classList.add("active");
+      // hidden charts need resize
+      setTimeout(() => {
+        Object.values(charts).forEach((c) => { try { c?.resize(); } catch (e) {} });
+      }, 0);
+    });
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
+</script>
+
+</body>
+</html>
